@@ -1,0 +1,123 @@
+/**
+ * @swagger
+ * /register:
+ *   post:
+ *     summary: Register a new user
+ *     description: Register a new user with the provided details.
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               Name:
+ *                 type: string
+ *               Email:
+ *                 type: string
+ *               Password:
+ *                 type: string
+ *               Role:
+ *                 type: string
+ *     responses:
+ *       200:
+ *         description: User registered successfully
+ *         content:
+ *           application/json:
+ *             example:
+ *               message: User registered successfully
+ *               data:
+ *                 _id: user_id
+ *                 Name: string
+ *                 Email: string
+ *                 Role: user
+ */
+
+/**
+ * @swagger
+ * /login:
+ *   post:
+ *     summary: Login as a user
+ *     description: Log in with the provided username and password.
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               Name:
+ *                 type: string
+ *               Password:
+ *                 type: string
+ *     responses:
+ *       200:
+ *         description: Login successful
+ *         content:
+ *           application/json:
+ *             example:
+ *               message: Login successful
+ *               data: JWT_token
+ */
+
+
+const userModel = require("../models/userSchema");
+const argon2 = require('argon2');
+const jwt = require('jsonwebtoken');
+
+const register = async (req, res) => {
+  try {
+    const { Name, Email, Password, Role } = req.body;
+
+    // Validate input
+    if (!Name || !Email || !Password) {
+      return res.status(400).json({ error: "Name, Email, and Password are required." });
+    }
+
+    const passwordHash = await argon2.hash(Password);
+
+    const userDetails = await userModel.create({
+      Name: Name,
+      Email: Email,
+      Password: passwordHash,
+      Role: Role || 'user'
+    });
+
+    res.json(userDetails);
+  } catch (error) {
+    console.error("Error in createUser:", error);
+    res.status(500).json({ error: "An error occurred while creating the user." });
+  }
+};
+
+const login = async (req, res) => {
+  try {
+    const { Name, Password, Role } = req.body;
+
+    // Validate input
+    if (!Name || !Password || !Role) {
+      return res.status(400).json({ error: "Name and Password are required." });
+    }
+
+    const foundUser = await userModel.findOne({ Name: Name });
+
+    if (!foundUser) {
+      return res.status(401).json({ error: "Authentication failed. User not found." });
+    }
+
+    const isPasswordValid = await argon2.verify(foundUser.Password, Password);
+
+    if (!isPasswordValid) {
+      return res.status(401).json({ error: "Authentication failed. Invalid password." });
+    }
+
+    const token = jwt.sign({ Namee: foundUser.Name, Role: foundUser.Role }, process.env.JWT_SECRET, { expiresIn: '1h' });
+    console.log('Token:', token);
+    res.header('Authorization', token).json({ message: "Login successful", data: token });
+  } catch (error) {
+    console.error("Error in login:", error);
+    res.status(500).json({ error: "Internal Server Error" });
+  }
+};
+
+module.exports = { register, login };
